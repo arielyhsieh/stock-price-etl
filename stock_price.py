@@ -92,5 +92,5 @@ with DAG(
     symbol = Variable.get("symbol")
     cur = return_snowflake_conn()
 
-    price_list = return_last_90d_price(symbol)
-    load(cur, price_list, target_table)
+    records = return_last_90d_price(symbol)
+    load(cur, records, target_table)
