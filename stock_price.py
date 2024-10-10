@@ -82,7 +82,7 @@ default_args = {
 
 with DAG(
     dag_id = 'StockPrice',
-    start_date = datetime(2024,10,9),
+    start_date = datetime(2024,10,10),
     catchup=False,
     tags=['ETL'],
     schedule = '30 9 * * *',
