@@ -93,4 +93,4 @@ with DAG(
     cur = return_snowflake_conn()
 
     records = return_last_90d_price(symbol)
-    load(cur, records.result(), target_table, symbol)
+    load(cur, records, target_table, symbol)
