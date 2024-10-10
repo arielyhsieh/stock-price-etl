@@ -85,7 +85,7 @@ with DAG(
     start_date = datetime(2024,10,10),
     catchup=False,
     tags=['ETL'],
-    schedule = '30 1 * * *',
+    schedule = '0 9 * * *',
     default_args=default_args
 ) as dag:
     target_table = "stock_price_db.raw_data.stock_price"
