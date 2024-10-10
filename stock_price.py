@@ -40,7 +40,7 @@ def return_last_90d_price(symbol):
         # {'1. open': '117.3500', '2. high': '119.6600', '3. low': '117.2500', '4. close': '117.8700', '5. volume': '286038878', 'date': '2024-09-17'}
     return results
 
-
+@task
 def load(con, records, target_table, symbol):
     try:
         con.execute("BEGIN;")
@@ -92,5 +92,5 @@ with DAG(
     symbol = Variable.get("symbol")
     cur = return_snowflake_conn()
 
-    records = return_last_90d_price(symbol)
-    load(cur, records, target_table, symbol)
+    price_list = return_last_90d_price(symbol)
+    load(cur, price_list, target_table, symbol)
