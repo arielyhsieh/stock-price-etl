@@ -41,7 +41,7 @@ def return_last_90d_price(symbol):
     return results
 
 
-def load(con, records, target_table):
+def load(con, records, target_table, symbol):
     try:
         con.execute("BEGIN;")
         con.execute(f"""
@@ -93,4 +93,4 @@ with DAG(
     cur = return_snowflake_conn()
 
     records = return_last_90d_price(symbol)
-    load(cur, records, target_table)
+    load(cur, records, target_table, symbol)
