@@ -19,9 +19,6 @@ def return_snowflake_conn():
     return conn.cursor()
 
 
-symbol = Variable.get('symbol')
-
-
 @task
 def return_last_90d_price(symbol):
     """
