@@ -94,7 +94,7 @@ with DAG(
     start_date = datetime(2024,10,11),
     catchup=False,
     tags=['ML', 'ELT'],
-    schedule = '0 11 * * *'
+    schedule = '0 11 * * *',
     default_args=default_args
 ) as dag:
 
