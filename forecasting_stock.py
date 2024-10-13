@@ -19,7 +19,7 @@ def return_snowflake_conn():
 @task
 def train(cur, train_input_table, train_view, forecast_function_name):
     """
-     - Create a view with training related columns
+     - Create a view with training-related columns
      - Create a model with the view above
     """
 
@@ -30,7 +30,10 @@ def train(cur, train_input_table, train_view, forecast_function_name):
             SYMBOL 
         FROM {train_input_table};"""
 
-    create_model_sql = f"""CREATE OR REPLACE FUNCTION {forecast_function_name}() RETURNS VARIANT LANGUAGE JAVASCRIPT AS
+    # Renaming UDF to avoid conflict with existing procedure
+    new_forecast_function_name = f"{forecast_function_name}_UDF"
+
+    create_model_sql = f"""CREATE OR REPLACE FUNCTION {new_forecast_function_name}() RETURNS VARIANT LANGUAGE JAVASCRIPT AS
     $$
         var result = snowflake.execute(`SELECT * FROM {train_view}`);
         return result;
@@ -40,7 +43,7 @@ def train(cur, train_input_table, train_view, forecast_function_name):
         cur.execute(create_view_sql)
         cur.execute(create_model_sql)
         # Inspect the accuracy metrics of your model.
-        cur.execute(f"CALL {forecast_function_name}();")
+        cur.execute(f"CALL {new_forecast_function_name}();")
     except Exception as e:
         print(e)
         raise
@@ -52,9 +55,12 @@ def predict(cur, forecast_function_name, train_input_table, forecast_table, fina
      - Generate predictions and store the results to a table named forecast_table.
      - Union your predictions with your historical data, then create the final table
     """
+    # Update the function name in the predict block as well
+    new_forecast_function_name = f"{forecast_function_name}_UDF"
+
     make_prediction_sql = f"""BEGIN
         -- This is the step that creates your predictions.
-        LET x := (SELECT * FROM TABLE({forecast_function_name}()));
+        LET x := (SELECT * FROM TABLE({new_forecast_function_name}()));
         -- These steps store your predictions to a table.
         CREATE OR REPLACE TABLE {forecast_table} AS SELECT * FROM TABLE(RESULT_SCAN(:x));
     END;"""
@@ -85,10 +91,10 @@ default_args = {
 
 with DAG(
     dag_id = 'TrainPredict',
-    start_date = datetime(2024,10,12),
+    start_date = datetime(2024,10,11),
     catchup=False,
     tags=['ML', 'ELT'],
-    schedule = '25 23 * * *',
+    schedule = '32 23 * * *',
     default_args=default_args
 ) as dag:
 
