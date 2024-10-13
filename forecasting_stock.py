@@ -3,8 +3,7 @@ from airflow.models import Variable
 from airflow.decorators import task
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
 
-from datetime import timedelta
-from datetime import datetime
+from datetime import timedelta, datetime
 import snowflake.connector
 import requests
 
@@ -20,23 +19,21 @@ def return_snowflake_conn():
 @task
 def train(cur, train_input_table, train_view, forecast_function_name):
     """
-    - Create a view with training related columns
-    - Create a model with the view above
+     - Create a view with training related columns
+     - Create a model with the view above
     """
 
-    create_view_sql = f"""CREATE OR REPLACE VIEW {train_view} AS SELECT
-        DATE, CLOSE, SYMBOL
+    create_view_sql = f"""CREATE OR REPLACE VIEW {train_view} AS 
+        SELECT 
+            DATE::TIMESTAMP_NTZ AS DATE,  -- Cast DATE to TIMESTAMP_NTZ
+            CLOSE, 
+            SYMBOL 
         FROM {train_input_table};"""
 
-    create_model_sql = f"""CREATE OR REPLACE PROCEDURE {forecast_function_name}()
-    RETURNS STRING
-    LANGUAGE JAVASCRIPT
-    EXECUTE AS CALLER
-    AS
+    create_model_sql = f"""CREATE OR REPLACE FUNCTION {forecast_function_name}() RETURNS VARIANT LANGUAGE JAVASCRIPT AS
     $$
-    var result = SYSTEM$REFERENCE('VIEW', '{train_view}');
-    var forecast_model = {forecast_function_name};
-    return forecast_model;
+        var result = snowflake.execute(`SELECT * FROM {train_view}`);
+        return result;
     $$;"""
 
     try:
@@ -52,21 +49,16 @@ def train(cur, train_input_table, train_view, forecast_function_name):
 @task
 def predict(cur, forecast_function_name, train_input_table, forecast_table, final_table):
     """
-    - Generate predictions and store the results to a table named forecast_table.
-    - Union your predictions with your historical data, then create the final table
+     - Generate predictions and store the results to a table named forecast_table.
+     - Union your predictions with your historical data, then create the final table
     """
     make_prediction_sql = f"""BEGIN
         -- This is the step that creates your predictions.
-        CALL {forecast_function_name}(
-            FORECASTING_PERIODS => 7,
-            -- Here we set your prediction interval.
-            CONFIG_OBJECT => {{'prediction_interval': 0.95}}
-        );
+        LET x := (SELECT * FROM TABLE({forecast_function_name}()));
         -- These steps store your predictions to a table.
-        LET x := SQLID;
         CREATE OR REPLACE TABLE {forecast_table} AS SELECT * FROM TABLE(RESULT_SCAN(:x));
     END;"""
-    
+
     create_final_table_sql = f"""CREATE OR REPLACE TABLE {final_table} AS
         SELECT SYMBOL, DATE, CLOSE AS actual, NULL AS forecast, NULL AS lower_bound, NULL AS upper_bound
         FROM {train_input_table}
@@ -96,7 +88,7 @@ with DAG(
     start_date = datetime(2024,10,12),
     catchup=False,
     tags=['ML', 'ELT'],
-    schedule = '12 23 * * *',
+    schedule = '25 23 * * *',
     default_args=default_args
 ) as dag:
 
