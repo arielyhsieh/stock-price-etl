@@ -10,10 +10,8 @@ import requests
 
 
 def return_snowflake_conn():
-
     # Initialize the SnowflakeHook
     hook = SnowflakeHook(snowflake_conn_id='snowflake_conn')
-
     # Execute the query and fetch results
     conn = hook.get_conn()
     return conn.cursor()
@@ -22,27 +20,30 @@ def return_snowflake_conn():
 @task
 def train(cur, train_input_table, train_view, forecast_function_name):
     """
-     - Create a view with training related columns
-     - Create a model with the view above
+    - Create a view with training related columns
+    - Create a model with the view above
     """
 
     create_view_sql = f"""CREATE OR REPLACE VIEW {train_view} AS SELECT
         DATE, CLOSE, SYMBOL
         FROM {train_input_table};"""
 
-    create_model_sql = f"""CREATE OR REPLACE SNOWFLAKE.ML.FORECAST {forecast_function_name} (
-        INPUT_DATA => SYSTEM$REFERENCE('VIEW', '{train_view}'),
-        SERIES_COLNAME => 'SYMBOL',
-        TIMESTAMP_COLNAME => 'DATE',
-        TARGET_COLNAME => 'CLOSE',
-        CONFIG_OBJECT => {{ 'ON_ERROR': 'SKIP' }}
-    );"""
+    create_model_sql = f"""CREATE OR REPLACE PROCEDURE {forecast_function_name}()
+    RETURNS STRING
+    LANGUAGE JAVASCRIPT
+    EXECUTE AS CALLER
+    AS
+    $$
+    var result = SYSTEM$REFERENCE('VIEW', '{train_view}');
+    var forecast_model = {forecast_function_name};
+    return forecast_model;
+    $$;"""
 
     try:
         cur.execute(create_view_sql)
         cur.execute(create_model_sql)
-        # Inspect the accuracy metrics of your model. 
-        cur.execute(f"CALL {forecast_function_name}!SHOW_EVALUATION_METRICS();")
+        # Inspect the accuracy metrics of your model.
+        cur.execute(f"CALL {forecast_function_name}();")
     except Exception as e:
         print(e)
         raise
@@ -51,12 +52,12 @@ def train(cur, train_input_table, train_view, forecast_function_name):
 @task
 def predict(cur, forecast_function_name, train_input_table, forecast_table, final_table):
     """
-     - Generate predictions and store the results to a table named forecast_table.
-     - Union your predictions with your historical data, then create the final table
+    - Generate predictions and store the results to a table named forecast_table.
+    - Union your predictions with your historical data, then create the final table
     """
     make_prediction_sql = f"""BEGIN
         -- This is the step that creates your predictions.
-        CALL {forecast_function_name}!FORECAST(
+        CALL {forecast_function_name}(
             FORECASTING_PERIODS => 7,
             -- Here we set your prediction interval.
             CONFIG_OBJECT => {{'prediction_interval': 0.95}}
@@ -65,6 +66,7 @@ def predict(cur, forecast_function_name, train_input_table, forecast_table, fina
         LET x := SQLID;
         CREATE OR REPLACE TABLE {forecast_table} AS SELECT * FROM TABLE(RESULT_SCAN(:x));
     END;"""
+    
     create_final_table_sql = f"""CREATE OR REPLACE TABLE {final_table} AS
         SELECT SYMBOL, DATE, CLOSE AS actual, NULL AS forecast, NULL AS lower_bound, NULL AS upper_bound
         FROM {train_input_table}
@@ -91,10 +93,10 @@ default_args = {
 
 with DAG(
     dag_id = 'TrainPredict',
-    start_date = datetime(2024,10,11),
+    start_date = datetime(2024,10,12),
     catchup=False,
     tags=['ML', 'ELT'],
-    schedule = '0 11 * * *',
+    schedule = '12 23 * * *',
     default_args=default_args
 ) as dag:
 
